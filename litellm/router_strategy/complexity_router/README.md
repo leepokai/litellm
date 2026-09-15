@@ -11,6 +11,23 @@ Unlike the semantic `auto_router` which uses embedding-based matching, the `comp
 - **Predictable behavior** - rule-based scoring is deterministic
 - **Fully configurable** - weights, thresholds, and keyword lists can be customized
 
+## Savings estimates
+
+The Cost Optimization dashboard compares routed spend with an estimate of sending the same requests to the configured highest-tier baseline model. Actual spend includes recorded classifier costs. A negative estimate can reflect real cache-write costs when switching models, even when the selected model has cheaper token prices
+
+**Claude Code limitation:** The tested vanilla Claude Code 2.1.273 session, using API-key authentication with `--bare --tools ''` and experimental betas enabled, reports **Savings unavailable**. Its beta headers and `context_management` request field are not supported by the cache estimator. Concurrent auxiliary requests can also prevent the exclusive initial request from establishing equal baseline and actual costs. Routing and actual-spend recording continue. This result applies to that tested version and configuration; it does not establish support or failure for every Claude client
+
+For supported native Anthropic `/v1/messages` requests, the proxy tracks the hypothetical baseline cache separately from the caches of the models that actually serve requests. A baseline read requires a matching prompt prefix that was available before the request and remains inside its five-minute or one-hour TTL. A request served by a cheaper model also advances the hypothetical baseline history. An assistant message alone never establishes a cache hit
+
+Use a stable session ID and a configured proxy database. The primary database stores each comparison's start, request ownership and bounded cache history together, so a proxy restart or Redis eviction cannot create a second first turn. The comparison covers registered requests from that recorded start; it does not reconstruct earlier session traffic. Database failures leave savings unknown while inference and actual-spend recording continue
+
+When the initial request is served by the exact baseline deployment with equivalent pricing, its observed usage establishes equal nonzero model costs and zero model savings. Recorded classifier cost is still deducted. Later requests use modeled baseline cache history, even when they select the baseline again. Unknown initial cache contents, unseen prefixes, overlapping requests, retries and unsupported shapes can leave estimates unavailable. The model holds the actual response's output-token count fixed; it does not predict how the baseline would answer
+
+Baseline counting requires the same endpoint and API key as the request that served the user; another endpoint or credential produces `unknown` with reason `unsupported_baseline_recipient`. Configured Anthropic-compatible gateways must support native token counting for every required cache prefix, including system/tools-only prefixes with an empty `messages` array. Unavailable counts prevent establishing that prefix history. The estimator does not substitute local tokenizers, synthetic messages, or partial prefix counts
+
+Spend metadata records `autorouter_savings_estimate` with its version, comparison identity/start, provenance, status and reason. The Auto-Router dashboard compares baseline and actual costs over the same estimated turns, including numeric zero savings, and shows coverage alongside total actual spend. Earlier unversioned estimates are preserved in recorded subtotals but excluded from current coverage. Existing session-status clients receive no baseline total when coverage is partial
+
+
 ## How It Works
 
 The router scores each request across 7 dimensions:
